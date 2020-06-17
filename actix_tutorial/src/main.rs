@@ -1,6 +1,7 @@
 mod models;
 mod config;
 mod handlers;
+mod db;
 
 use actix_web::{HttpServer, App, web};
 use std::io;
@@ -23,6 +24,7 @@ async fn main() -> io::Result<()> {
         App::new()
             .data(pool.clone())
             .route("/", web::get().to(status))
+            .route("/todos{_:/?}", web::get().to(get_todos))
     })
     .bind(format!("{}:{}", config.server.host, config.server.port))?
     .run()
