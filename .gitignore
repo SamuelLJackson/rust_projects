@@ -1,1 +1,2 @@
-##actix_tutorial/target
+target
+.env
