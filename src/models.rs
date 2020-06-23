@@ -8,6 +8,7 @@ pub struct Status {
     pub status: String
 }
 
+#[derive(Clone)]
 pub struct AppState {
     pub pool: Pool,
     pub logger: Logger,
