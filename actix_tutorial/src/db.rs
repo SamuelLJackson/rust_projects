@@ -1,15 +1,19 @@
-use crate::models::{TodoList, TodoItem};
+use crate::models::{TodoList, TodoItem,};
+use crate::errors::{AppError, AppErrorType,};
+
 use deadpool_postgres::Client;
-use std::io;
 use tokio_pg_mapper::FromTokioPostgresRow;
 
-pub async fn get_todos(client: &Client) -> Result<Vec<TodoList>, io::Error> {
+pub async fn get_todos(client: &Client) -> Result<Vec<TodoList>, AppError> {
 
-    let statement = client.prepare("select * from todo_list order by id desc").await.unwrap();
+    let statement = client
+        .prepare("select * from todo_list order by id desc")
+        .await
+        .map_err(AppError::db_error)?;
 
     let todos = client.query(&statement, &[])
         .await
-        .expect("Error fetching todos")
+        .map_err(AppError::db_error)?
         .iter()
         .map(|row| TodoList::from_row_ref(row).unwrap())
         .collect::<Vec<TodoList>>();
@@ -17,13 +21,13 @@ pub async fn get_todos(client: &Client) -> Result<Vec<TodoList>, io::Error> {
     Ok(todos)
 }
 
-pub async fn get_items(client: &Client, list_id: i32) -> Result<Vec<TodoItem>, io::Error> {
+pub async fn get_items(client: &Client, list_id: i32) -> Result<Vec<TodoItem>, AppError> {
 
     let statement = client.prepare("select * from todo_item where list_id = $1 order by id").await.unwrap();
 
     let items = client.query(&statement, &[&list_id])
         .await
-        .expect("Error fetching todos")
+        .map_err(AppError::db_error)?
         .iter()
         .map(|row| TodoItem::from_row_ref(row).unwrap())
         .collect::<Vec<TodoItem>>();
@@ -31,31 +35,40 @@ pub async fn get_items(client: &Client, list_id: i32) -> Result<Vec<TodoItem>, i
     Ok(items)
 }
 
-pub async fn create_todo_list(client: &Client, title: String) -> Result<TodoList, io::Error> {
+pub async fn create_todo_list(client: &Client, title: String) -> Result<TodoList, AppError> {
 
-    let statement = client.prepare("insert into todo_list (title) values ($1) returning id, title").await.unwrap();
+    let statement = client.prepare("insert into todo_list (title) values ($1) returning id, title")
+        .await
+        .map_err(AppError::db_error)?;
 
     client.query(&statement, &[&title])
         .await
-        .expect("Error creating todo")
+        .map_err(AppError::db_error)?
         .iter()
         .map(|row| TodoList::from_row_ref(row).unwrap())
         .collect::<Vec<TodoList>>()
         .pop()
-        .ok_or(io::Error::new(io::ErrorKind::Other, "Error creating todo list"))
+        .ok_or(AppError { 
+            message: Some(String::from("error creating todo")), 
+            cause: Some(String::from("unknown cause")), 
+            error_type: AppErrorType::DbError
+        })
 }
 
-pub async fn mark_item_complete(client: &Client, list_id: i32, item_id: i32) -> Result<(), io::Error> {
+pub async fn mark_item_complete(client: &Client, list_id: i32, item_id: i32) -> Result<bool, AppError> {
 
-    let statement = client.prepare("update todo_item set checked = true where list_id = $1 and id = $2 and checked = false").await.unwrap();
+    let statement = client
+        .prepare("update todo_item set checked = true where list_id = $1 and id = $2 and checked = false")
+        .await
+        .map_err(AppError::db_error)?;
 
     let result = client.execute(&statement, &[&list_id, &item_id])
         .await
-        .expect("Error updating todo_item");
+        .map_err(AppError::db_error)?;
 
 
     match result {
-        ref updated if *updated == 1 => Ok(()),
-        _ => Err(io::Error::new(io::ErrorKind::Other, "Failed to mark item checked"))
+        ref updated if *updated == 1 => Ok(true),
+        _ => Ok(false),
     }
 }
